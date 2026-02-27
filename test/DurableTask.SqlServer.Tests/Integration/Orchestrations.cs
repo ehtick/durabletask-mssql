@@ -913,15 +913,21 @@ namespace DurableTask.SqlServer.Tests.Integration
             await instance.SuspendAsync();
 
             // Wait for the orchestration to become suspended
-            OrchestrationState state = await instance.WaitForStart(TimeSpan.FromSeconds(5));
+            OrchestrationState state = await instance.GetStateAsync();
+            TimeSpan waitForSuspendTimeout = TimeSpan.FromSeconds(5);
+            using CancellationTokenSource cts = new(waitForSuspendTimeout);
+            while (!cts.IsCancellationRequested && state.OrchestrationStatus != OrchestrationStatus.Suspended)
+            {
+                state = await instance.GetStateAsync();
+            }
             Assert.Equal(OrchestrationStatus.Suspended, state.OrchestrationStatus);
 
             // Now terminate the orchestration
             await instance.TerminateAsync("Bye!");
 
-            TimeSpan timeout = TimeSpan.FromSeconds(5);
+            TimeSpan waitForTerminationTimeout = TimeSpan.FromSeconds(5);
             state = await instance.WaitForCompletion(
-                timeout,
+                waitForTerminationTimeout,
                 expectedStatus: OrchestrationStatus.Terminated,
                 expectedOutput: "Bye!");
 
