@@ -487,7 +487,7 @@ BEGIN
 
     DECLARE @now datetime2(7) = SYSUTCDATETIME()
 
-    IF @existingStatus IN ('Running', 'Pending')
+    IF @existingStatus IN ('Running', 'Pending', 'Suspended')
     BEGIN
         -- Create a payload to store the reason, if any
         DECLARE @PayloadID uniqueidentifier = NULL
