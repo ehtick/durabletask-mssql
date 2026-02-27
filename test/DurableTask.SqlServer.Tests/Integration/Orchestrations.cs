@@ -892,5 +892,50 @@ namespace DurableTask.SqlServer.Tests.Integration
 
             LogAssert.NoWarningsOrErrors(this.testService.LogProvider);
         }
+
+        [Fact]
+        public async Task TerminateSuspendedOrchestration()
+        {
+            string input = $"Hello {DateTime.UtcNow:o}";
+            string orchestrationName = "OrchestrationWithTimer";
+            TimeSpan delay = TimeSpan.FromSeconds(30);
+
+            // Performs a delay and then returns the input
+            TestInstance<string> instance = await this.testService.RunOrchestration(
+                input,
+                orchestrationName,
+                implementation: (ctx, input) => ctx.CreateTimer(ctx.CurrentUtcDateTime.Add(delay), input));
+
+            // Wait for the orchestration to finish starting
+            await instance.WaitForStart();
+
+            // Suspend the orchestration so that it won't process any new events
+            await instance.SuspendAsync();
+
+            // Wait for the orchestration to become suspended
+            OrchestrationState state = await instance.WaitForStart(TimeSpan.FromSeconds(5));
+            Assert.Equal(OrchestrationStatus.Suspended, state.OrchestrationStatus);
+
+            // Now terminate the orchestration
+            await instance.TerminateAsync("Bye!");
+
+            TimeSpan timeout = TimeSpan.FromSeconds(5);
+            state = await instance.WaitForCompletion(
+                timeout,
+                expectedStatus: OrchestrationStatus.Terminated,
+                expectedOutput: "Bye!");
+
+            // Validate logs
+            LogAssert.NoWarningsOrErrors(this.testService.LogProvider);
+            LogAssert.Sequence(
+                this.testService.LogProvider,
+                LogAssert.AcquiredAppLock(),
+                LogAssert.CheckpointStarting(orchestrationName),
+                LogAssert.CheckpointCompleted(orchestrationName),
+                LogAssert.CheckpointStarting(orchestrationName),
+                LogAssert.CheckpointCompleted(orchestrationName),
+                LogAssert.CheckpointStarting(orchestrationName),
+                LogAssert.CheckpointCompleted(orchestrationName));
+        }
     }
 }
